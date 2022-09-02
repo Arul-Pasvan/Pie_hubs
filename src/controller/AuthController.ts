@@ -1,11 +1,11 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
-import { createQueryBuilder } from "typeorm";
 import jwt from "jsonwebtoken";
+import smtp from "../config/mailer";
 import { User } from "../model/Auth/M_User";
 import { Student } from "../model/Auth/M_Student";
-import smtp from "../config/mailer";
+import { updateOtp, updateVerify, getUser } from "../services/UserService";
 
 export default {
   signup: async (req: Request, res: Response) => {
@@ -33,12 +33,8 @@ export default {
             otp,
           });
           await user.save();
-        } else {
-          await createQueryBuilder("m_user")
-            .update(User)
-            .set({ otp })
-            .where("id = :id", { id: users.id })
-            .execute();
+        } else if (users.id) {
+          updateOtp(otp, users.id);
         }
         res.status(201).json({ success: true, msg: "Please verify email" });
       }
@@ -51,26 +47,20 @@ export default {
   signin: async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
-      if (email && password) {
-        const user = await User.findOneBy({ email });
-        if (!user) {
-          res.status(400).json({ success: false, msg: "Invalid credentials" }); // Can't find user
-        } else {
-          const pwd: any = user.password;
-          if ((await bcrypt.compare(password, pwd)) && user.email_verified) {
-            const key: any = process.env.ACCESS_TOKEN_SECRET;
-            const token = jwt.sign({ userID: user.id }, key);
-            res
-              .status(200)
-              .json({ success: true, msg: "Successfully logged in", token });
-          } else {
-            res
-              .status(400)
-              .json({ success: false, msg: "Invalid credentials" }); // Incorrect Password or OTP not verified
-          }
-        }
+      const user = await User.findOneBy({ email });
+      if (!user) {
+        res.status(400).json({ success: false, msg: "Invalid credentials" }); // Can't find user
       } else {
-        res.status(400).json({ success: false, msg: "Enter the credentials" });
+        const pwd: any = user.password;
+        if ((await bcrypt.compare(password, pwd)) && user.email_verified) {
+          const key: any = process.env.ACCESS_TOKEN_SECRET;
+          const token = jwt.sign({ userID: user.id }, key);
+          res
+            .status(200)
+            .json({ success: true, msg: "Successfully logged in", token });
+        } else {
+          res.status(400).json({ success: false, msg: "Invalid credentials" }); // Incorrect Password or OTP not verified
+        }
       }
     } catch (err) {
       console.log(err);
@@ -86,11 +76,7 @@ export default {
         if (!user || user.otp != otp) {
           res.status(400).json({ success: false, msg: "Invalid credentials" }); // invalid user or otp not match
         } else {
-          await createQueryBuilder("m_user")
-            .update(User)
-            .set({ email_verified: true })
-            .where("email = :email", { email: user.email })
-            .execute();
+          updateVerify(user.email);
           res.status(200).json({
             success: true,
             msg: "Otp Verified Successfully",
@@ -108,7 +94,7 @@ export default {
     try {
       const { first_name, last_name, mobile, school_name } = req.body;
       const { user_id } = req.params;
-      const user = await User.findOneById(user_id);
+      const user = await getUser(user_id);
       if (!user) {
         res.status(400).json({ success: false, msg: "Invalid User" });
       } else {

@@ -1,5 +1,4 @@
 import { Entity, ManyToOne, JoinColumn } from "typeorm";
-
 import { Base } from "../Base";
 import { User } from "../Auth/M_User";
 import { A_Social } from "./A_Social";

@@ -1,23 +1,29 @@
 import { Request, Response } from "express";
-import { User } from "../model/Auth/M_User";
-import { Activity } from "../model/Master/M_Activity";
 import { U_Goal } from "../model/User/U_Goal";
 import { U_Activity } from "../model/User/U_Activity";
-import { Team } from "../model/Master/M_Team";
 import { TeamMember } from "../model/Activity/T_Team_Members";
 import { A_Social } from "../model/Activity/A_Social";
 import { A_Social_Like } from "../model/Activity/A_Social_Like";
 import { A_Social_View } from "../model/Activity/A_Social_View";
-import { M_Goal } from "../model/Master/M_Goal";
+import { TransactionType } from "../interface/enum";
+import {
+  getUser,
+  getGoal,
+  getActivity,
+  getTeam,
+  getSocialLike,
+  getSocial,
+  deleteLike,
+} from "../services/UserService";
 
 export default {
   u_goal_post: async (req: Request, res: Response) => {
     try {
       const { user_id } = req.params;
       const { goal_id, activity_id, atoms_scored } = req.body;
-      const user = await User.findOneById(user_id);
-      const goal = await M_Goal.findOneById(goal_id);
-      const activity = await Activity.findOneById(activity_id);
+      const user = await getUser(user_id);
+      const goal = await getGoal(goal_id);
+      const activity = await getActivity(activity_id);
       if (!user || !goal || !activity) {
         res
           .status(404)
@@ -42,7 +48,7 @@ export default {
   u_goal_get: async (req: Request, res: Response) => {
     try {
       const { user_id } = req.params;
-      const user = await User.findOneById(user_id);
+      const user = await getUser(user_id);
       const user_goal = await U_Goal.find();
       if (!user || !user_goal) {
         res
@@ -61,8 +67,8 @@ export default {
     try {
       const { user_id } = req.params;
       const { activity_id, video_url, atoms_scored, comments } = req.body;
-      const user = await User.findOneById(user_id);
-      const activity = await Activity.findOneById(activity_id);
+      const user = await getUser(user_id);
+      const activity = await getActivity(activity_id);
       if (!user || !activity) {
         res
           .status(404)
@@ -88,7 +94,7 @@ export default {
   u_activity_get: async (req: Request, res: Response) => {
     try {
       const { user_id } = req.params;
-      const user = await User.findOneById(user_id);
+      const user = await getUser(user_id);
       const user_activity = await U_Activity.find();
       if (!user || !user_activity) {
         res
@@ -106,9 +112,9 @@ export default {
   team_member_post: async (req: Request, res: Response) => {
     try {
       const { team_id } = req.params;
-      const team = await Team.findOneById(team_id);
+      const team = await getTeam(team_id);
       const { user_id } = req.body;
-      const user = await User.findOneById(user_id);
+      const user = await getUser(user_id);
       if (!team || !user) {
         res.status(404).json({ suceess: false, msg: "user or team not found" });
       } else {
@@ -126,7 +132,7 @@ export default {
   team_member_get: async (req: Request, res: Response) => {
     try {
       const { team_id } = req.params;
-      const team = await Team.findOneById(team_id);
+      const team = await getTeam(team_id);
       const team_members = await TeamMember.find();
       if (!team || !team_members) {
         res
@@ -145,8 +151,8 @@ export default {
     try {
       const { activity_id } = req.params;
       const { user_id, video_url, atoms_scored } = req.body;
-      const activity = await Activity.findOneById(activity_id);
-      const user = await User.findOneById(user_id);
+      const activity = await getActivity(activity_id);
+      const user = await getUser(user_id);
       if (!activity || !user) {
         res
           .status(404)
@@ -171,7 +177,7 @@ export default {
   social_get: async (req: Request, res: Response) => {
     try {
       const { activity_id } = req.params;
-      const activity = await Activity.findOneById(activity_id);
+      const activity = await getActivity(activity_id);
       const social_activity = await A_Social.find();
       if (!activity || !social_activity) {
         res.status(404).json({
@@ -190,24 +196,39 @@ export default {
   social_like_post: async (req: Request, res: Response) => {
     try {
       const { social_activity_id } = req.params;
-      const { user_id } = req.body;
-      const social = await A_Social.findOneById(social_activity_id);
-      const user = await User.findOneById(user_id);
+      const { user_id, type } = req.body;
+      const social = await getSocial(social_activity_id);
+      const user = await getUser(user_id);
       if (!user || !social) {
         res
           .status(404)
           .json({ suceess: false, msg: "user or social activity not found" });
-      } else {
-        const social_like = A_Social_Like.create({ user, social });
-        await social_like.save();
-        if (social.like) {
-          social.like = 1 + parseInt(social.like.toString());
-          await social.save();
+      } else if (social.like) {
+        if (type === TransactionType.LIKE) {
+          const social_like_data = await getSocialLike(
+            user_id,
+            social_activity_id
+          );
+          if (social_like_data.length > 0) {
+            res.status(400).json({ success: false, msg: "already liked" });
+          } else {
+            const social_like = A_Social_Like.create({ user, social });
+            await social_like.save();
+            social.like = 1 + parseInt(social.like.toString());
+            res.status(201).json({
+              success: true,
+              msg: "social activity liked successfully",
+            });
+          }
+        } else if (type === TransactionType.UNLIKE) {
+          await deleteLike(user_id, social_activity_id);
+          social.like = 1 - parseInt(social.like.toString());
           res.status(201).json({
             success: true,
-            msg: "social activity added like successfully",
+            msg: "social activity unliked successfully",
           });
         }
+        await social.save();
       }
     } catch (err) {
       console.log(err);
@@ -217,7 +238,7 @@ export default {
   social_like_get: async (req: Request, res: Response) => {
     try {
       const { social_activity_id } = req.params;
-      const social = await A_Social.findOneById(social_activity_id);
+      const social = await getSocial(social_activity_id);
       const social_like = await A_Social_Like.find();
       if (!social || !social_like) {
         res.status(404).json({
@@ -237,8 +258,8 @@ export default {
     try {
       const { social_activity_id } = req.params;
       const { user_id } = req.body;
-      const user = await User.findOneById(user_id);
-      const social = await A_Social.findOneById(social_activity_id);
+      const user = await getUser(user_id);
+      const social = await getSocial(social_activity_id);
       if (!social || !user) {
         res
           .status(404)
@@ -260,7 +281,7 @@ export default {
   social_view_get: async (req: Request, res: Response) => {
     try {
       const { social_activity_id } = req.params;
-      const social = await A_Social.findOneById(social_activity_id);
+      const social = await getSocial(social_activity_id);
       const social_view = await A_Social_View.find();
       if (!social || !social_view) {
         res.status(404).json({

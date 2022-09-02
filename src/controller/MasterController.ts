@@ -1,14 +1,20 @@
 import { Request, Response } from "express";
-import { createQueryBuilder } from "typeorm";
 import { Class } from "../model/Master/M_Class";
 import { Subject } from "../model/Master/M_Subject";
 import { Chapter } from "../model/Master/M_Chapter";
 import { Topic } from "../model/Master/M_Topic";
 import { SubTopic } from "../model/Master/M_SubTopic";
 import { Activity } from "../model/Master/M_Activity";
-import { User } from "../model/Auth/M_User";
 import { M_Goal } from "../model/Master/M_Goal";
 import { Team } from "../model/Master/M_Team";
+import {
+  getUser,
+  getSubjects,
+  getChapter,
+  getChapters,
+  getTopic,
+  getSubtopic,
+} from "../services/UserService";
 
 export default {
   class_get: async (req: Request, res: Response) => {
@@ -36,10 +42,8 @@ export default {
   subject_get: async (req: Request, res: Response) => {
     try {
       const { class_id } = req.params;
-      const classId: any = await Class.findOneById(class_id);
-      const subject = await createQueryBuilder(Subject, "m_subject")
-        .where("m_subject.class_id = :class_id", { class_id })
-        .getMany();
+      const classId = await Class.findOneById(class_id);
+      const subject = getSubjects(class_id);
       if (!classId || !subject) {
         res.status(404).json({
           success: false,
@@ -56,7 +60,7 @@ export default {
   subject_post: async (req: Request, res: Response) => {
     try {
       const { class_id } = req.params;
-      const classes: any = await Class.findOneById(class_id);
+      const classes = await Class.findOneById(class_id);
       if (!classes) {
         res.status(404).json({ success: false, msg: "Class not found" });
       } else {
@@ -103,11 +107,7 @@ export default {
   },
   chapter_category: async (req: Request, res: Response) => {
     try {
-      const chapter = await Chapter.find({
-        order: {
-          category_name: "DESC",
-        },
-      });
+      const chapter = getChapter();
       if (!chapter) {
         res.status(404).json({ success: false, msg: "no chapter found" });
       } else {
@@ -121,10 +121,8 @@ export default {
   chapter_get: async (req: Request, res: Response) => {
     try {
       const { subject_id } = req.params;
-      const subId: any = await Subject.findOneById(subject_id);
-      const chapter = await createQueryBuilder(Chapter, "m_chapter")
-        .where("m_chapter.subject_id = :subject_id", { subject_id })
-        .getMany();
+      const subId = await Subject.findOneById(subject_id);
+      const chapter = await getChapters(subject_id);
       if (!subId || !chapter) {
         res
           .status(404)
@@ -141,7 +139,7 @@ export default {
     try {
       const { subject_id } = req.params;
       const { chapter_name, category_name } = req.body;
-      const subject: any = await Subject.findOneById(subject_id);
+      const subject = await Subject.findOneById(subject_id);
       if (!subject) {
         res.status(404).json({ success: false, msg: "Subject not found" });
       } else {
@@ -164,10 +162,8 @@ export default {
   topic_get: async (req: Request, res: Response) => {
     try {
       const { chapter_id } = req.params;
-      const chapterId: any = await Chapter.findOneById(chapter_id);
-      const topic = await createQueryBuilder(Topic, "m_topic")
-        .where("m_topic.chapter_id = :chapter_id", { chapter_id })
-        .getMany();
+      const chapterId = await Chapter.findOneById(chapter_id);
+      const topic = await getTopic(chapter_id);
       if (!chapterId || !topic) {
         res
           .status(404)
@@ -183,7 +179,7 @@ export default {
   topic_post: async (req: Request, res: Response) => {
     try {
       const { chapter_id } = req.params;
-      const chapter: any = await Chapter.findOneById(chapter_id);
+      const chapter = await Chapter.findOneById(chapter_id);
       if (!chapter) {
         res.status(404).json({ success: false, msg: "Chapter not found" });
       } else {
@@ -218,10 +214,8 @@ export default {
   subtopic_get: async (req: Request, res: Response) => {
     try {
       const { topic_id } = req.params;
-      const topicId: any = await Topic.findOneById(topic_id);
-      const subtopic = await createQueryBuilder(SubTopic, "m_subtopic")
-        .where("m_subtopic.topic_id = :topic_id", { topic_id })
-        .getMany();
+      const topicId = await Topic.findOneById(topic_id);
+      const subtopic = getSubtopic(topic_id);
       if (!topicId || !subtopic) {
         res.status(404).json({ success: false, msg: "Topic not found" });
       } else {
@@ -236,7 +230,7 @@ export default {
     try {
       const { topic_id } = req.params;
       const { subtopic_name, url } = req.body;
-      const topic: any = await Topic.findOneById(topic_id);
+      const topic = await Topic.findOneById(topic_id);
       if (!topic) {
         res.status(404).json({ success: false, msg: "Topic not found" });
       } else {
@@ -250,7 +244,7 @@ export default {
           .status(201)
           .json({ success: true, msg: "Subtopic added Successfully" });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.log(err);
       res.status(500).json({ success: false, msg: "invalid request" });
     }
@@ -284,19 +278,13 @@ export default {
   },
   activity_post: async (req: Request, res: Response) => {
     try {
-      const {
-        class_id,
-        subject_id,
-        chapter_id,
-        activity_name,
-        atoms,
-        url,
-      }: any = req.body;
+      const { class_id, subject_id, chapter_id, activity_name, atoms, url } =
+        req.body;
       const { user_id } = req.params;
       const classes = await Class.findOneById(class_id);
       const subject = await Subject.findOneById(subject_id);
       const chapter = await Chapter.findOneById(chapter_id);
-      const user = await User.findOneById(user_id);
+      const user = await getUser(user_id);
       if (!classes || !subject || !chapter || !user) {
         res.status(400).json({
           success: false,
@@ -366,7 +354,7 @@ export default {
   team_post: async (req: Request, res: Response) => {
     try {
       const { user_id, team_name, team_pic, team_atoms } = req.body;
-      const user = await User.findOneById(user_id);
+      const user = await getUser(user_id);
       if (!user) {
         res.status(404).json({ suceess: false, msg: "user not found" });
       } else {

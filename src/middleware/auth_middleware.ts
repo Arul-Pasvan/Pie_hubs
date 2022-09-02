@@ -1,12 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-// export interface IRequest extends Request {
-//   userID: string; // or any other type
-// }
-
 export default (req: Request, res: Response, next: NextFunction) => {
-  // const { token } = req.body;
   const token = req.header("authorization");
 
   if (token) {
